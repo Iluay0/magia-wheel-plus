@@ -1,0 +1,15 @@
+{
+    "Author": "Iluay",
+    "Name": "Magia Wheel Plus",
+    "Punchline": "Attack / Defense / Auto buttons next to the Eureka magia board.",
+    "Description": "A small bar next to the Eureka magia board with Attack, Defense and Auto buttons that run /magiaattack, /magiadefense and /magiaauto.",
+    "Tags": [
+        "eureka",
+        "magia",
+        "qol"
+    ],
+    "InternalName": "MagiaWheelPlus",
+    "AssemblyVersion": "0.1.0.0",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15
+}
