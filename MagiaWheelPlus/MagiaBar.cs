@@ -5,6 +5,7 @@ using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.BaseTypes;
+using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 using KamiToolKit.Nodes.Simplified;
 using KamiToolKit.Timelines;
@@ -15,10 +16,13 @@ public sealed unsafe class MagiaBar : NativeAddon
 {
     public const string BoardName = "EurekaElementalHud";
     private const float GapFromBoard = 10f;
+    private const float BoardYOffset = 44f;
     private const uint AutoIndicatorResNodeId = 38;
     private const uint AutoIndicatorImageNodeId = 39;
     private const ushort AutoAttackPartId = 15;
     private const ushort AutoDefensePartId = 16;
+    private const long ToggleDebounceMs = 1000;
+    private const string AutoOffCommand = "/magiaauto off";
 
     private sealed record ButtonSpec(string Label, string Command, string Icon)
     {
@@ -27,7 +31,6 @@ public sealed unsafe class MagiaBar : NativeAddon
 
     private static readonly ButtonSpec Attack = new("Attack", "/magiaattack", "attack");
     private static readonly ButtonSpec Defense = new("Defense", "/magiadefense", "defense");
-    private static readonly ButtonSpec Auto = new("Auto", "/magiaauto", "auto_off");
 
     private enum AutoMode
     {
@@ -36,21 +39,34 @@ public sealed unsafe class MagiaBar : NativeAddon
         Defense,
     }
 
+    private sealed record ToggleSpec(string Label, AutoMode Mode, string OnCommand, string Icon);
+
+    private static readonly ToggleSpec AutoAttack = new("Auto Attack", AutoMode.Attack, "/magiaauto attack", "auto_attack");
+    private static readonly ToggleSpec AutoDefense = new("Auto Defense", AutoMode.Defense, "/magiaauto defense", "auto_defense");
+
+    private readonly Configuration config;
     private readonly string assetDir = Path.Combine(Plugin.PluginInterface.AssemblyLocation.DirectoryName!, "Assets");
     private readonly List<NodeBase> nodes = [];
+    private CircleButtonNode sideButton = null!;
     private ImGuiIconButtonNode attackButton = null!;
     private ImGuiIconButtonNode defenseButton = null!;
-    private ImGuiIconButtonNode autoButton = null!;
+    private ImGuiIconButtonNode autoAttackButton = null!;
+    private ImGuiIconButtonNode autoDefenseButton = null!;
     private float appliedBoardScale;
     private bool? appliedHasTarget;
+    private bool? appliedOnLeft;
+    private AutoMode currentAutoMode;
     private AutoMode? appliedAutoMode;
+    private AutoMode? toggleLockMode;
+    private long toggleLockUntil;
 
     [SetsRequiredMembers]
-    public MagiaBar()
+    public MagiaBar(Configuration config)
     {
+        this.config = config;
         InternalName = "MagiaWheelPlusBar";
         Title = "Magia Wheel Plus";
-        Size = new Vector2(32, 104);
+        Size = new Vector2(32, 158);
         OpenWindowSoundEffectId = 0;
         RememberClosePosition = false;
         DisableClose = true;
@@ -65,44 +81,107 @@ public sealed unsafe class MagiaBar : NativeAddon
         WindowNode?.IsVisible = false;
         appliedBoardScale = -1f;
         appliedHasTarget = null;
+        appliedOnLeft = null;
         appliedAutoMode = null;
+        toggleLockMode = null;
 
         var pill = new SimpleNineGridNode
         {
             TexturePath = "ui/uld/OperationGuide.tex",
-            TextureCoordinates = new Vector2(0, 0),
+            TextureCoordinates = Vector2.Zero,
             TextureSize = new Vector2(60, 28),
             TopOffset = 13,
             BottomOffset = 13,
             LeftOffset = 13,
             RightOffset = 13,
-            Size = new Vector2(28, 100),
+            Size = new Vector2(28, 154),
             Position = new Vector2(2, 2),
         };
         AddNode(pill);
         nodes.Add(pill);
 
-        attackButton = AddButton(Attack, 10);
-        defenseButton = AddButton(Defense, 40);
-        autoButton = AddButton(Auto, 70);
+        sideButton = new CircleButtonNode
+        {
+            Size = new Vector2(16),
+            Position = new Vector2(8, 8),
+        };
+        sideButton.OnClick = ToggleSide;
+        AddNode(sideButton);
+        nodes.Add(sideButton);
+
+        attackButton = AddIconButton(28, Attack.Tooltip, Attack.Icon, () => SendCommand(Attack.Command));
+        defenseButton = AddIconButton(58, Defense.Tooltip, Defense.Icon, () => SendCommand(Defense.Command));
+
+        var divider = new SimpleNineGridNode
+        {
+            TexturePath = "ui/uld/WindowA_Line.tex",
+            TextureCoordinates = Vector2.Zero,
+            TextureSize = new Vector2(32, 4),
+            LeftOffset = 4,
+            RightOffset = 4,
+            Size = new Vector2(18, 4),
+            Position = new Vector2(7, 86),
+            Alpha = 0.6f,
+        };
+        AddNode(divider);
+        nodes.Add(divider);
+
+        autoAttackButton = AddIconButton(94, AutoAttack.Label, $"{AutoAttack.Icon}_dim", () => OnToggleClick(AutoAttack));
+        autoDefenseButton = AddIconButton(124, AutoDefense.Label, $"{AutoDefense.Icon}_dim", () => OnToggleClick(AutoDefense));
     }
 
-    private ImGuiIconButtonNode AddButton(ButtonSpec spec, float y)
+    protected override void OnUpdate(AtkUnitBase* addon)
+    {
+        var board = (AtkUnitBase*)Plugin.GameGui.GetAddonByName(BoardName).Address;
+        var boardVisible = board != null && board->IsVisible;
+        if (addon->RootNode->IsVisible() != boardVisible)
+            addon->RootNode->ToggleVisibility(boardVisible);
+        if (!boardVisible) return;
+
+        var boardScale = board->Scale;
+        if (MathF.Abs(boardScale - appliedBoardScale) > 0.001f)
+        {
+            addon->SetScale(boardScale / AtkUnitBase.GetGlobalUIScale(), true);
+            appliedBoardScale = boardScale;
+        }
+
+        var onLeft = config.BarOnLeft;
+        var gap = GapFromBoard * boardScale;
+        var x = (short)MathF.Round(onLeft
+            ? board->X - addon->GetScaledWidth(true) - gap
+            : board->X + board->GetScaledWidth(true) + gap);
+        var y = (short)MathF.Round(board->Y + BoardYOffset * boardScale);
+        if (addon->X != x || addon->Y != y)
+            addon->SetPosition(x, y);
+
+        UpdateSideButton(onLeft);
+        UpdateTargetState();
+        UpdateAutoMode(board);
+    }
+
+    protected override void OnFinalize(AtkUnitBase* addon)
+    {
+        foreach (var node in nodes)
+            node.Dispose();
+        nodes.Clear();
+    }
+
+    private ImGuiIconButtonNode AddIconButton(float y, string tooltip, string icon, Action onClick)
     {
         var button = new ImGuiIconButtonNode
         {
             ShowBackground = false,
             Size = new Vector2(24),
             Position = new Vector2(4, y),
-            TextTooltip = spec.Tooltip,
+            TextTooltip = tooltip,
         };
         button.OnClick = () =>
         {
             if (button.IsEnabled)
-                SendCommand(spec.Command);
+                onClick();
         };
         RemoveIconInset(button);
-        button.LoadTextureFromFile(Path.Combine(assetDir, $"{spec.Icon}.png"));
+        button.LoadTextureFromFile(Path.Combine(assetDir, $"{icon}.png"));
         AddNode(button);
         nodes.Add(button);
         return button;
@@ -123,28 +202,30 @@ public sealed unsafe class MagiaBar : NativeAddon
             .Build());
     }
 
-    protected override void OnUpdate(AtkUnitBase* addon)
+    private void ToggleSide()
     {
-        var board = (AtkUnitBase*)Plugin.GameGui.GetAddonByName(BoardName).Address;
-        var boardVisible = board != null && board->IsVisible;
-        if (addon->RootNode->IsVisible() != boardVisible)
-            addon->RootNode->ToggleVisibility(boardVisible);
-        if (!boardVisible) return;
+        config.BarOnLeft = !config.BarOnLeft;
+        config.Save();
+    }
 
-        var boardScale = board->Scale;
-        if (MathF.Abs(boardScale - appliedBoardScale) > 0.001f)
-        {
-            addon->SetScale(boardScale / AtkUnitBase.GetGlobalUIScale(), true);
-            appliedBoardScale = boardScale;
-        }
+    private void OnToggleClick(ToggleSpec spec)
+    {
+        var now = Environment.TickCount64;
+        if (toggleLockMode == currentAutoMode && now < toggleLockUntil)
+            return;
 
-        var x = (short)MathF.Round(board->X + board->GetScaledWidth(true) + GapFromBoard * boardScale);
-        var y = (short)MathF.Round(board->Y + 44 * boardScale);
-        if (addon->X != x || addon->Y != y)
-            addon->SetPosition(x, y);
+        SendCommand(currentAutoMode == spec.Mode ? AutoOffCommand : spec.OnCommand);
+        toggleLockMode = currentAutoMode;
+        toggleLockUntil = now + ToggleDebounceMs;
+    }
 
-        UpdateTargetState();
-        UpdateAutoMode(board);
+    private void UpdateSideButton(bool onLeft)
+    {
+        if (appliedOnLeft == onLeft) return;
+        appliedOnLeft = onLeft;
+
+        sideButton.Icon = onLeft ? CircleButtonIcon.RightArrow : CircleButtonIcon.LeftArrow;
+        sideButton.TextTooltip = "Move bar to the other side";
     }
 
     private void UpdateTargetState()
@@ -168,12 +249,10 @@ public sealed unsafe class MagiaBar : NativeAddon
     {
         var resNode = board->GetNodeById(AutoIndicatorResNodeId);
         var imageNode = board->GetImageNodeById(AutoIndicatorImageNodeId);
-        var resVisible = resNode != null && resNode->IsVisible();
-        var imageVisible = imageNode != null && imageNode->IsVisible();
-        var partId = imageNode != null ? imageNode->PartId : (ushort)0;
+        var indicatorVisible = resNode != null && resNode->IsVisible() && imageNode != null && imageNode->IsVisible();
 
-        var mode = resVisible && imageVisible
-            ? partId switch
+        var mode = indicatorVisible
+            ? imageNode->PartId switch
             {
                 AutoAttackPartId => AutoMode.Attack,
                 AutoDefensePartId => AutoMode.Defense,
@@ -181,15 +260,21 @@ public sealed unsafe class MagiaBar : NativeAddon
             }
             : AutoMode.Off;
 
+        currentAutoMode = mode;
         if (appliedAutoMode == mode) return;
         appliedAutoMode = mode;
 
-        var name = mode.ToString().ToLowerInvariant();
-        autoButton.LoadTextureFromFile(Path.Combine(assetDir, $"auto_{name}.png"));
-        autoButton.TextTooltip = $"{Auto.Tooltip}  ({name})";
+        UpdateToggle(autoAttackButton, AutoAttack, mode);
+        UpdateToggle(autoDefenseButton, AutoDefense, mode);
+    }
 
-        var alpha = imageNode != null ? imageNode->Color.A : (byte)0;
-        Plugin.Log.Info($"MagiaWheelPlus: auto mode {mode} (node38 {(resNode == null ? "missing" : resVisible ? "visible" : "hidden")}, node39 {(imageNode == null ? "missing" : imageVisible ? "visible" : "hidden")}, node39 PartId {partId}, node39 alpha {alpha})");
+    private void UpdateToggle(ImGuiIconButtonNode button, ToggleSpec spec, AutoMode mode)
+    {
+        var active = mode == spec.Mode;
+        button.LoadTextureFromFile(Path.Combine(assetDir, active ? $"{spec.Icon}.png" : $"{spec.Icon}_dim.png"));
+        button.TextTooltip = active
+            ? $"{spec.Label}  {AutoOffCommand}"
+            : $"{spec.Label}  {spec.OnCommand}";
     }
 
     private static void SendCommand(string command)
@@ -197,12 +282,5 @@ public sealed unsafe class MagiaBar : NativeAddon
         var str = Utf8String.FromString(command);
         UIModule.Instance()->ProcessChatBoxEntry(str);
         str->Dtor(true);
-    }
-
-    protected override void OnFinalize(AtkUnitBase* addon)
-    {
-        foreach (var node in nodes)
-            node.Dispose();
-        nodes.Clear();
     }
 }

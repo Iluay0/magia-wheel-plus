@@ -1,15 +1,15 @@
 {
     "Author": "Iluay",
     "Name": "Magia Wheel Plus",
-    "Punchline": "Attack / Defense / Auto buttons next to the Eureka magia board.",
-    "Description": "A small bar next to the Eureka magia board with Attack, Defense and Auto buttons that run /magiaattack, /magiadefense and /magiaauto.",
+    "Punchline": "Magia board bar with spin buttons and auto toggles, plus auto Next for lockbox / appraisal results.",
+    "Description": "A small native four-button bar next to the Eureka magia board: one-shot Attack and Defense spins (/magiaattack, /magiadefense), Auto Attack and Auto Defense toggles (/magiaauto), and an arrow to swap the bar to the other side of the board. Also adds an \"Auto next\" checkbox above the lockbox / logogram appraisal window that presses Next on the results for you.",
     "Tags": [
         "eureka",
         "magia",
         "qol"
     ],
     "InternalName": "MagiaWheelPlus",
-    "AssemblyVersion": "0.1.0.0",
+    "AssemblyVersion": "0.2.0.0",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15
 }

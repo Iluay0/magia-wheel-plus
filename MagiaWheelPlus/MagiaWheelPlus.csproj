@@ -2,8 +2,8 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
     <PropertyGroup>
         <Authors>Iluay</Authors>
-        <Version>0.1.0.0</Version>
-        <Description>Attack / Defense / Auto buttons next to the Eureka magia board.</Description>
+        <Version>0.2.0.0</Version>
+        <Description>Four-button magia board bar (one-shot spins, auto toggles, side swap arrow) and an "Auto next" overlay above the lockbox / logogram appraisal window that presses Next for you.</Description>
         <IsPackable>false</IsPackable>
         <TargetFramework>net10.0-windows7.0</TargetFramework>
         <Nullable>enable</Nullable>

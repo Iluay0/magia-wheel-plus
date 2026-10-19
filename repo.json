@@ -4,7 +4,7 @@
     "Name": "Magia Wheel Plus",
     "InternalName": "MagiaWheelPlus",
     "AssemblyVersion": "0.1.0.0",
-    "Description": "A small bar next to the Eureka magia board with Attack, Defense and Auto buttons that run /magiaattack, /magiadefense and /magiaauto.",
+    "Description": "A small native four-button bar next to the Eureka magia board: one-shot Attack and Defense spins (/magiaattack, /magiadefense), Auto Attack and Auto Defense toggles (/magiaauto), and an arrow to swap the bar to the other side of the board. Also adds an \"Auto next\" checkbox above the lockbox / logogram appraisal window that presses Next on the results for you.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/Iluay0/magia-wheel-plus",
     "Tags": [
@@ -14,7 +14,7 @@
     ],
     "DalamudApiLevel": 15,
     "LoadPriority": 0,
-    "Punchline": "Attack / Defense / Auto buttons next to the Eureka magia board.",
+    "Punchline": "Magia board bar with spin buttons and auto toggles, plus auto Next for lockbox / appraisal results.",
     "IsHide": "False",
     "IsTestingExclusive": "False",
     "DownloadLinkInstall": "https://github.com/Iluay0/magia-wheel-plus/releases/download/v0.1.0.0/latest.zip",
