@@ -3,7 +3,7 @@
     "Author": "Iluay",
     "Name": "Magia Wheel Plus",
     "InternalName": "MagiaWheelPlus",
-    "AssemblyVersion": "0.0.0.0",
+    "AssemblyVersion": "0.1.0.0",
     "Description": "A small bar next to the Eureka magia board with Attack, Defense and Auto buttons that run /magiaattack, /magiadefense and /magiaauto.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/Iluay0/magia-wheel-plus",
@@ -19,6 +19,6 @@
     "IsTestingExclusive": "False",
     "DownloadLinkInstall": "https://github.com/Iluay0/magia-wheel-plus/releases/download/v0.1.0.0/latest.zip",
     "DownloadLinkUpdate": "https://github.com/Iluay0/magia-wheel-plus/releases/download/v0.1.0.0/latest.zip",
-    "LastUpdate": "0"
+    "LastUpdate": "1792442223"
   }
 ]
